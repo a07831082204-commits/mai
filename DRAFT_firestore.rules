@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Global Safety Net ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Glabal Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidChat(data) {
+      return data.userId is string && 
+             data.userId == request.auth.uid &&
+             data.title is string && 
+             data.title.size() <= 200 &&
+             data.lastMessage is string && 
+             data.lastMessage.size() <= 1000 &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.role is string && 
+             (data.role == "user" || data.role == "model" || data.role == "assistant") &&
+             data.text is string && 
+             data.text.size() <= 100000 &&
+             data.timestamp is number &&
+             (data.get('imageUrl', null) == null || (data.imageUrl is string && data.imageUrl.size() <= 2048)) &&
+             (data.get('isImage', null) == null || data.isImage is bool);
+    }
+
+    // --- Collections ---
+
+    match /chats/{chatId} {
+      allow create: if isSignedIn() && 
+                      isValidId(chatId) && 
+                      isValidChat(incoming()) &&
+                      incoming().keys().hasAll(['userId', 'title', 'lastMessage', 'createdAt', 'updatedAt']) &&
+                      incoming().keys().size() == 5;
+
+      allow get: if isOwner(existing().userId);
+      
+      allow list: if isSignedIn() && 
+                    resource.data.userId == request.auth.uid;
+
+      allow update: if isOwner(existing().userId) && 
+                      incoming().userId == existing().userId &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().updatedAt == request.time &&
+                      (
+                        // Action: Update Title or Last Message
+                        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'lastMessage', 'updatedAt'])
+                      );
+
+      allow delete: if isOwner(existing().userId);
+
+      // --- Subcollections ---
+      match /messages/{messageId} {
+        allow create: if isSignedIn() && 
+                        isValidId(messageId) &&
+                        isValidMessage(incoming()) &&
+                        // Verify parent chat exists and belongs to user
+                        get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+
+        allow list: if isSignedIn() && 
+                      get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        
+        allow get: if isSignedIn() && 
+                     get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+
+        // Messages are usually immutable in this app
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+  }
+}

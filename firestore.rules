@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Global Safety Net ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+
+    function isValidChat(data) {
+      return data.userId == request.auth.uid &&
+             data.title is string && data.title.size() <= 500 &&
+             data.lastMessage is string && data.lastMessage.size() <= 100000;
+    }
+
+    function isValidMessage(data) {
+      return data.userId == request.auth.uid &&
+             data.role is string && (data.role in ['user', 'model', 'assistant']) &&
+             data.text is string && data.text.size() <= 100000;
+    }
+
+    // --- Collections ---
+
+    match /chats/{chatId} {
+      allow create: if isSignedIn() && 
+                      isValidId(chatId) &&
+                      isValidChat(incoming()) &&
+                      incoming().createdAt == request.time &&
+                      incoming().updatedAt == request.time &&
+                      incoming().keys().hasAll(['userId', 'title', 'lastMessage', 'createdAt', 'updatedAt']);
+
+      allow get: if isOwner(existing().userId);
+      
+      allow list: if isSignedIn() && 
+                    resource.data.userId == request.auth.uid;
+
+      allow update: if isOwner(existing().userId) && 
+                      isValidChat(incoming()) &&
+                      incoming().userId == existing().userId &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().updatedAt == request.time &&
+                      (
+                        // Action: Update Title or Last Message from send/edit
+                        incoming().diff(existing()).affectedKeys().hasAny(['title', 'lastMessage', 'updatedAt'])
+                      );
+
+      allow delete: if isOwner(existing().userId);
+
+      match /messages/{messageId} {
+        allow create: if isSignedIn() && 
+                        isValidId(messageId) &&
+                        isValidMessage(incoming()) &&
+                        incoming().timestamp == request.time &&
+                        // Pillar 1: Relational Sync
+                        get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+
+        allow list: if isSignedIn() && 
+                      resource.data.userId == request.auth.uid;
+        
+        allow get: if isOwner(existing().userId);
+
+        allow update, delete: if false;
+      }
+    }
+
+    // Allow connection test
+    match /_connection_test_/{docId} {
+      allow get: if isSignedIn();
+    }
+  }
+}

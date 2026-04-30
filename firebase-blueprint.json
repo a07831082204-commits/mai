@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Chat": {
+      "title": "Chat",
+      "description": "A conversation between the user and the AI agent",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the user who owns this chat"
+        },
+        "title": {
+          "type": "string",
+          "description": "User-facing title for the chat session"
+        },
+        "lastMessage": {
+          "type": "string",
+          "description": "Snippet of the most recent message in the chat"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time the chat was updated"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the chat was first created"
+        }
+      },
+      "required": ["userId", "title", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single exchange in a chat conversation",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the user who owns this message"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "model", "assistant"],
+          "description": "The sender of the message"
+        },
+        "text": {
+          "type": "string",
+          "description": "The textual content of the message"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Epoch timestamp of the message"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL to a generated image, if applicable"
+        },
+        "isImage": {
+          "type": "boolean",
+          "description": "Flag indicating if the message is primarily an image"
+        }
+      },
+      "required": ["userId", "role", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "chats": {
+      "schema": "Chat",
+      "description": "Collection of user chats"
+    },
+    "chats/{chatId}/messages": {
+      "schema": "Message",
+      "description": "Subcollection of messages within a chat"
+    }
+  }
+}

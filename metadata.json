@@ -1,0 +1,6 @@
+{
+  "name": "muntadher.asd",
+  "description": "منصة Nano Banana المتطورة للذكاء الاصطناعي - مخصصة بواسطة منتظر",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Chat", "Markdown Rendering", "Arabic Support"]
+}
