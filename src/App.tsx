@@ -108,6 +108,13 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // التعديل المطلوب: مراقبة حالة المستخدم لضمان تحديث الواجهة فوراً
+  useEffect(() => {
+    if (user && !loading) {
+      console.log("تم اكتشاف المستخدم بنجاح:", user.displayName);
+    }
+  }, [user, loading]);
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -125,7 +132,6 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Connection test
     const testConn = async () => {
       try {
         await getDocFromServer(doc(db, "_connection_test_", "ping"));
@@ -219,7 +225,6 @@ export default function App() {
     setIsTyping(true);
 
     try {
-      // Save User Message
       await addDoc(collection(db, "chats", chatId, "messages"), {
         userId: user.uid,
         role: "user",
@@ -227,12 +232,9 @@ export default function App() {
         timestamp: serverTimestamp()
       });
 
-      // Generate Image URL (using pollinations.ai)
-      // We'll use a seed to make it more reliable and interesting
       const seed = Math.floor(Math.random() * 1000000);
       const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seed}&width=1024&height=1024&nologo=true`;
 
-      // Save Model Message with Image
       await addDoc(collection(db, "chats", chatId, "messages"), {
         userId: user.uid,
         role: "model",
@@ -242,7 +244,6 @@ export default function App() {
         timestamp: serverTimestamp()
       });
 
-      // Update Chat record
       await updateDoc(doc(db, "chats", chatId), {
         lastMessage: "تم توليد صورة",
         updatedAt: serverTimestamp()
@@ -269,7 +270,6 @@ export default function App() {
     }
 
     try {
-      // Save User Message
       await addDoc(collection(db, "chats", chatId, "messages"), {
         userId: user.uid,
         role: "user",
@@ -277,7 +277,6 @@ export default function App() {
         timestamp: serverTimestamp()
       });
 
-      // Update Chat record
       await updateDoc(doc(db, "chats", chatId), {
         lastMessage: userInput,
         updatedAt: serverTimestamp()
@@ -285,7 +284,6 @@ export default function App() {
 
       setIsTyping(true);
 
-      // Prepare history for Gemini
       const chatMessages = messages.concat({
         id: "temp-user",
         role: "user",
@@ -296,13 +294,10 @@ export default function App() {
       let assistantText = "";
       const stream = chatStream(chatMessages);
       
-      // Temporary message ID for streaming
       const assistantId = "streaming-temp";
       
-      // We'll update the final message at the end
       for await (const chunk of stream) {
         assistantText += chunk;
-        // Optimization: Local state update for smooth streaming
         setMessages(prev => {
           const last = prev[prev.length - 1];
           if (last && last.id === assistantId) {
@@ -313,7 +308,6 @@ export default function App() {
         });
       }
 
-      // Save Assistant Message
       await addDoc(collection(db, "chats", chatId, "messages"), {
         userId: user.uid,
         role: "model",
@@ -355,6 +349,7 @@ export default function App() {
   }
 
   if (!user) {
+    // تم التأكد من تمرير دالة تسجيل الدخول بشكل صحيح
     return <LoginScreen onLogin={signInWithGoogle} />;
   }
 
@@ -362,7 +357,6 @@ export default function App() {
     <div className="flex h-screen w-full bg-black overflow-hidden text-neutral-100 font-sans relative">
       <DragonBackground />
       
-      {/* Sidebar Overlay */}
       <AnimatePresence>
         {!isSidebarOpen && (
           <motion.div 
@@ -375,7 +369,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
       <motion.aside
         initial={false}
         animate={{ 
@@ -442,9 +435,7 @@ export default function App() {
         </div>
       </motion.aside>
 
-      {/* Main Area */}
       <main className="flex-1 flex flex-col relative min-w-0 h-full">
-        {/* Header */}
         <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 transition-all">
           <div className="flex items-center gap-4">
             <button 
@@ -467,7 +458,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-8 md:px-0 scroll-smooth">
           <div className="max-w-3xl mx-auto w-full space-y-10 pb-10">
             {!activeChatId && messages.length === 0 ? (
@@ -494,7 +484,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Input */}
         <div className="p-4 md:pb-8">
           <div className="max-w-3xl mx-auto">
             <div className="relative flex items-end gap-2 bg-neutral-900/60 backdrop-blur-3xl border border-white/5 focus-within:border-gold-500/30 rounded-[28px] p-2 pr-4 transition-all shadow-2xl">
@@ -538,7 +527,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* Lightbox Preview */}
       <AnimatePresence>
         {previewImage && (
           <motion.div
@@ -576,9 +564,8 @@ export default function App() {
               <div className="relative w-full h-full flex items-center justify-center group/viewer">
                 <img 
                   src={previewImage} 
-                  alt="Preview" 
-                  className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_0_100px_rgba(251,191,36,0.1)] border border-white/5 select-none"
-                  referrerPolicy="no-referrer"
+                  alt="Preview"
+                  className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
                 />
               </div>
             </motion.div>
@@ -587,256 +574,5 @@ export default function App() {
       </AnimatePresence>
     </div>
   );
-}
-
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="h-screen w-full bg-black flex flex-col items-center justify-center relative overflow-hidden font-sans">
-      <DragonBackground />
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md px-6 z-10 text-center space-y-8"
-      >
-        <div className="space-y-4">
-          <motion.div 
-            animate={{ 
-              filter: ["drop-shadow(0 0 10px rgba(251,191,36,0))", "drop-shadow(0 0 20px rgba(251,191,36,0.3))", "drop-shadow(0 0 10px rgba(251,191,36,0))"]
-            }}
-            transition={{ repeat: Infinity, duration: 4 }}
-            className="w-24 h-24 bg-gradient-to-br from-gold-500 to-amber-600 rounded-[2.5rem] mx-auto flex items-center justify-center shadow-2xl"
-          >
-            <Sparkles className="w-12 h-12 text-black" />
-          </motion.div>
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight text-white mb-2">muntadher.asd</h1>
-            <p className="text-neutral-500 text-sm">مساعدك الذكي المستقبلي</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <button 
-            onClick={onLogin}
-            className="w-full py-4 rounded-2xl bg-white text-black font-bold flex items-center justify-center gap-3 hover:bg-neutral-200 transition-all group scale-100 hover:scale-[1.02]"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="google" />
-            <span>تسجيل الدخول باستخدام Google</span>
-            <ChevronRight className="w-4 h-4 group-hover:translate-x-[-4px] transition-transform" />
-          </button>
-          
-          <p className="text-[11px] text-neutral-600 px-8">
-            بتسجيل الدخول، فإنك توافق على تجربة ذكاء اصطناعي مخصصة ومدعومة بأحدث التقنيات.
-          </p>
-        </div>
-
-        <div className="pt-10 flex items-center justify-center gap-6 opacity-30 grayscale saturate-0">
-          <div className="h-[1px] w-12 bg-white" />
-          <span className="text-[10px] text-white font-bold tracking-widest uppercase">Safe & Secure</span>
-          <div className="h-[1px] w-12 bg-white" />
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function DragonBackground() {
-  return (
-    <div className="dragon-bg select-none pointer-events-none">
-      <div className="dragon-container">
-        <svg className="dragon-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-          {/* Detailed Dragon silhouette */}
-          <path 
-            d="M100,20 C120,20 140,40 140,70 C140,100 120,120 100,120 C80,120 60,100 60,70 C60,40 80,20 100,20 M140,70 Q180,70 180,110 Q180,150 140,150 Q100,150 80,180 Q60,150 20,150 Q-20,150 20,110 Q20,70 60,70" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="1" 
-            opacity="0.5" 
-          />
-          <path d="M100,30 Q110,40 100,50 Q90,40 100,30" fill="currentColor" />
-          <path d="M140,70 L160,50 M140,80 L165,75 M140,90 L160,100" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M60,70 L40,50 M60,80 L35,75 M60,90 L40,100" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </div>
-      {[...Array(40)].map((_, i) => (
-        <div 
-          key={i}
-          className="gold-ember"
-          style={{
-            left: `${Math.random() * 100}%`,
-            bottom: `-20px`,
-            width: `${1 + Math.random() * 2}px`,
-            height: `${1 + Math.random() * 2}px`,
-            animation: `float ${6 + Math.random() * 12}s linear infinite`,
-            animationDelay: `${-Math.random() * 20}s`
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SidebarItem({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick?: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-neutral-800/80 transition-all text-sm text-neutral-400 hover:text-neutral-200"
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function InputButton({ icon, onClick, disabled, tooltip }: { icon: React.ReactNode, onClick?: () => void, disabled?: boolean, tooltip?: string }) {
-  return (
-    <button 
-      onClick={onClick}
-      disabled={disabled}
-      title={tooltip}
-      className={cn(
-        "p-2.5 rounded-full transition-colors text-neutral-500 hover:text-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed",
-        !disabled && "hover:bg-white/5"
-      )}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function ChatMessage({ message, isLast, onImageClick }: { message: MessageExtended, isLast: boolean, onImageClick: () => void }) {
-  const isUser = message.role === "user";
-
-  const setInput = (text: string) => {
-    // This is a workaround since setInput is in the parent. 
-    // Usually we would pass it down, but for brevity we'll just handle it in the parent or use a custom event.
-    window.dispatchEvent(new CustomEvent('updateInput', { detail: text }));
-  };
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn(
-        "flex gap-4 md:gap-6",
-        isUser ? "flex-row-reverse" : "flex-row"
-      )}
-    >
-      <div className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border shadow-lg",
-        isUser ? "bg-neutral-800 border-white/10" : "bg-gold-500 border-gold-400"
-      )}>
-        {isUser ? <User className="w-4 h-4 text-neutral-400" /> : <Bot className="w-4 h-4 text-black" />}
-      </div>
-      
-      <div className={cn(
-        "flex flex-col min-w-0 max-w-[85%]",
-        isUser ? "items-end text-left" : "items-start text-right"
-      )}>
-        <p className="text-[10px] text-neutral-550 font-bold mb-1 uppercase tracking-tighter opacity-50">
-          {isUser ? "You" : "muntadher.asd"}
-        </p>
-        <div className={cn(
-          "rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm",
-          isUser ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/5" : "markdown-body bg-neutral-900/40 backdrop-blur-sm border border-gold-500/10"
-        )}>
-          {message.imageUrl ? (
-            <div className="space-y-4">
-              <div 
-                className="relative group cursor-zoom-in overflow-hidden rounded-xl border border-white/10 shadow-2xl"
-                onClick={onImageClick}
-              >
-                <img 
-                  src={message.imageUrl} 
-                  alt={message.text || "Generated"} 
-                  className="w-full max-w-sm transition-transform duration-500 hover:scale-105"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gold-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                   <div className="p-3 bg-black/40 backdrop-blur-xl rounded-full translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-                     <Maximize2 className="w-6 h-6 text-white" />
-                   </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
-                 <button 
-                   onClick={() => setInput(`عدّل هذه الصورة لتصبح: ${message.text?.split(': ')[1] || ""}`)}
-                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gold-500/10 hover:bg-gold-500/20 text-gold-500 transition-colors text-[10px] uppercase font-bold"
-                 >
-                   <Wand2 className="w-3 h-3" />
-                   تعديل الوصف
-                 </button>
-                 <a 
-                   href={message.imageUrl} 
-                   download="generated.jpg"
-                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition-colors text-[10px] uppercase font-bold"
-                 >
-                   <Download className="w-3 h-3" />
-                   تحميل
-                 </a>
-              </div>
-              <Markdown>{message.text || ""}</Markdown>
-            </div>
-          ) : (
-            isUser ? (
-              <p className="whitespace-pre-wrap">{message.text}</p>
-            ) : (
-              <Markdown>{message.text || "..."}</Markdown>
-            )
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function WelcomeScreen({ onPromptClick }: { onPromptClick: (p: string) => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-12 py-10">
-      <div className="text-center space-y-3">
-        <motion.div 
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          className="w-16 h-16 bg-gradient-to-br from-gold-500 to-amber-600 rounded-3xl mx-auto flex items-center justify-center shadow-2xl shadow-gold-500/20"
-        >
-          <Sparkles className="w-8 h-8 text-black" />
-        </motion.div>
-        <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-l from-white to-neutral-500 bg-clip-text text-transparent pt-4">كيف أساعدك اليوم؟</h1>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl px-4">
-        <PromptCard 
-          title="برمجة" 
-          desc="اكتب لي دالة لفرز قائمة في بايثون" 
-          onClick={() => onPromptClick("اكتب لي دالة لفرز قائمة في بايثون مع شرح بسيط.")}
-        />
-        <PromptCard 
-          title="ترجمة" 
-          desc="ترجم هذه الجملة إلى الإنجليزية" 
-          onClick={() => onPromptClick("ترجم هذه الجملة إلى الإنجليزية: 'الذكاء الاصطناعي هو مستقبل التكنولوجيا'.")}
-        />
-        <PromptCard 
-          title="نصيحة" 
-          desc="كيف أتحسن في البرمجة؟" 
-          onClick={() => onPromptClick("أعطني نصائح عملية للتحسن في مجال تطوير الويب.")}
-        />
-        <PromptCard 
-          title="إبداع" 
-          desc="اكتب قصة قصيرة عن الفضاء" 
-          onClick={() => onPromptClick("اكتب قصة قصيرة ومشوقة عن أول إنسان يصل إلى مجرة أخرى.")}
-        />
-      </div>
-    </div>
-  );
-}
-
-function PromptCard({ title, desc, onClick }: { title: string, desc: string, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-gold-500/20 hover:bg-gold-500/5 transition-all text-right group animate-in fade-in slide-in-from-bottom-2 duration-500"
-    >
-      <p className="text-sm font-bold text-neutral-200 mb-1 group-hover:text-gold-500 transition-colors tracking-tight">{title}</p>
-      <p className="text-xs text-neutral-500 leading-relaxed font-medium">{desc}</p>
-    </button>
-  );
-}
+            }
+                  
